@@ -195,39 +195,16 @@ prescription_rates <- joined_data %>%
 
 
 ```{r}
-NHS_healthboards <- st_read("~/Desktop/data_science/B208015/data/NHS_healthboards_2019.shp")
-
-NHS_healthboards <- NHS_healthboards %>%
+# Load spatial data and standardize the column
+NHS_healthboards <- st_read("~/Desktop/data_science/B208015/data/NHS_healthboards_2019.shp") %>%
+  rename(hb_name = HBName) %>%
   mutate(hb_name = paste("NHS", hb_name))
 
-NHS_healthboards <- NHS_healthboards %>%
-  rename(hb_name = HBName)
-
+# Join data
 prescription_rates_map <- NHS_healthboards %>%
   left_join(prescription_rates, by = "hb_name")
 
-# Prepare the data for the legend
-healthboard_legend <- prescription_rates_map %>%
-  select(hb_name, Region) %>%
-  arrange(Region, hb_name)
-
-# Create the custom legend using gt
-legend_table <- healthboard_legend %>%
-  gt() %>%
-  tab_header(
-    title = "Health Boards by Region"
-  ) %>%
-  cols_label(
-    hb_name = "Health Board",
-    Region = "Region"
-  ) %>%
-  data_color(
-    columns = vars(Region),
-    colors = c("Northern" = "lightblue", "Southern" = "lightcoral")
-  )
-
-library(patchwork)
-
+# Plot
 map_plot <- ggplot(data = prescription_rates_map) +
   geom_sf(aes(fill = prescriptions_per_person), color = "black", linewidth = 0.2) +
   scale_fill_viridis(name = "Prescriptions per Person", option = "C", labels = scales::comma) +
@@ -247,12 +224,8 @@ map_plot <- ggplot(data = prescription_rates_map) +
     legend.position = "bottom"
   )
 
-# Combine the map and legend using patchwork
-final_plot <- map_plot + legend_table + plot_layout(widths = c(3, 1))
-
-# Display the final combined plot
-print(final_plot)
-
+# Display the plot
+print(map_plot)
 ```
 
 
