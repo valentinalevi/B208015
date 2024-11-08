@@ -474,8 +474,6 @@ monthly_data &lt;- list(
   december %&gt;% mutate(Month = 12)
 )
 
-library(dplyr)
-
 
 # Combine datasets for each season
 
@@ -507,14 +505,18 @@ autumn &lt;- bind_rows(
   november %&gt;% mutate(Month = 11)
 ) %&gt;% mutate(Season = &quot;Autumn&quot;)
 
-# Remove the `dmd_code` column from each seasonal dataset
+# Removing the `dmd_code` column from each seasonal dataset
 winter &lt;- winter %&gt;% select(-dmd_code)
 spring &lt;- spring %&gt;% select(-dmd_code)
 summer &lt;- summer %&gt;% select(-dmd_code)
 autumn &lt;- autumn %&gt;% select(-dmd_code)
 
-# Combine all seasonal datasets into one
+# Combine all seasonal data sets into one
 combined_2023 &lt;- bind_rows(winter, spring, summer, autumn)</code></pre>
+<p>####Filtering the data to focus on antidepressants. From research
+online I have discovered that the typical antidepressants prescribed for
+people diagnosed with SAD are selective serotonin reuptake inhibitors
+(SSRIs). In particular, sertraline and fluoxetine.</p>
 </div>
 
 
