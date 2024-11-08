@@ -1,6 +1,7 @@
 ---
 title: "Assessment"
 output: html_document
+author: "Valentina Levi"
 date: "2024-11-01"
 ---
 
@@ -8,24 +9,149 @@ date: "2024-11-01"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+#### Investigation Question: 
+Do regions in northern Scotland, which experience longer winter nights, show higher seasonal increases in antidepressant prescriptions compared to southern regions?
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+#### Introduction
+Seasonal Affective Disorder (SAD) is a type of depression that occurs during certain seasons, usually fall or winter.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+We can therefore hypothesise that regions in northern Scotland, with more intense seasonal changes and longer winters, may experience higher prescription rates of antidepressants during winter months due to SAD. 
 
-```{r cars}
-summary(cars)
+The data that will be used is "Prescriptions in the Community" from NHS Public Health Scotland. I have chosen to use the year 2023 because it is the most recent complete year with all 4 seasons. 
+
+The Health Boards Area (2019) data from Scotland's Census will be used to define northern and southern regions in Scotland. 
+
+#### Loading in the data
+```{r}
+library(tidyverse)
+library(janitor) # For cleaning the data
+library(gt) # For tables
+library(here) # For directory structure
+library(readr)
+library(dplyr)
+
+#Reading in healthboards data
+healthboards <- read.csv(here("data/healthboards.csv")) %>% 
+  clean_names()
+
+# Define northern and southern regions based on Health Boards
+northern_boards <- c("NHS Grampian", "NHS Highland", "NHS Orkney", "NHS Shetland", "NHS Western Isles")
+southern_boards <- c("NHS Ayrshire and Arran", "NHS Borders", "NHS Dumfries and Galloway", 
+                     "NHS Fife", "NHS Forth Valley", "NHS Greater Glasgow and Clyde", 
+                     "NHS Lanarkshire", "NHS Lothian", "NHS Tayside")
+
+# Add a Region column to the Health Board data
+healthboards <- healthboards %>%
+  mutate(Region = case_when(
+    hb_name %in% northern_boards ~ "Northern",
+    hb_name %in% southern_boards ~ "Southern",
+    TRUE ~ "Other"
+  ))
+
+#Reading in prescriptions data from each month in the year 2023.
+january <- read.csv(here("data/january.csv")) %>% 
+  clean_names()
+
+february <- read.csv(here("data/february.csv")) %>% 
+  clean_names()
+
+march <- read.csv(here("data/march.csv")) %>% 
+  clean_names()
+
+april <- read.csv(here("data/april.csv")) %>% 
+  clean_names()
+
+may <- read.csv(here("data/may.csv")) %>% 
+  clean_names()
+
+june <- read.csv(here("data/june.csv")) %>% 
+  clean_names()
+
+july <- read.csv(here("data/july.csv")) %>% 
+  clean_names()
+
+august <- read.csv(here("data/august.csv")) %>% 
+  clean_names()
+
+september <- read.csv(here("data/september.csv")) %>% 
+  clean_names()
+
+october <- read.csv(here("data/october.csv")) %>% 
+  clean_names()
+
+november <- read.csv(here("data/november.csv")) %>% 
+  clean_names()
+
+december <- read.csv(here("data/december.csv")) %>% 
+  clean_names()
+
+# List of monthly data frames
+monthly_data <- list(
+  january %>% mutate(Month = 1),
+  february %>% mutate(Month = 2),
+  march %>% mutate(Month = 3),
+  april %>% mutate(Month = 4),
+  may %>% mutate(Month = 5),
+  june %>% mutate(Month = 6),
+  july %>% mutate(Month = 7),
+  august %>% mutate(Month = 8),
+  september %>% mutate(Month = 9),
+  october %>% mutate(Month = 10),
+  november %>% mutate(Month = 11),
+  december %>% mutate(Month = 12)
+)
+
+
+# Combine datasets for each season
+
+# Winter: December, January, February
+winter <- bind_rows(
+  january %>% mutate(Month = 1),
+  february %>% mutate(Month = 2),
+  december %>% mutate(Month = 12)
+) %>% mutate(Season = "Winter")
+
+# Spring: March, April, May
+spring <- bind_rows(
+  march %>% mutate(Month = 3),
+  april %>% mutate(Month = 4),
+  may %>% mutate(Month = 5)
+) %>% mutate(Season = "Spring")
+
+#Summer: June, July, August
+summer <- bind_rows(
+  june %>% mutate(Month = 6, dmd_code = as.character(dmd_code)),
+  july %>% mutate(Month = 7, dmd_code = as.character(dmd_code)),
+  august %>% mutate(Month = 8, dmd_code = as.character(dmd_code))
+) %>% mutate(Season = "Summer")
+
+# Autumn: September, October, November
+autumn <- bind_rows(
+  september %>% mutate(Month = 9),
+  october %>% mutate(Month = 10),
+  november %>% mutate(Month = 11)
+) %>% mutate(Season = "Autumn")
+
+# Remove the `dmd_code` column from each seasonal dataset
+winter <- winter %>% select(-dmd_code)
+spring <- spring %>% select(-dmd_code)
+summer <- summer %>% select(-dmd_code)
+autumn <- autumn %>% select(-dmd_code)
+
+# Combine all seasonal datasets into one
+combined_2023 <- bind_rows(winter, spring, summer, autumn)
+
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
 
-Testing if it works!!
+
+
+
+
+
+
+
+
