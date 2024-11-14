@@ -1,8 +1,10 @@
 ---
 title: "Assessment"
-output: html_document
 author: "Valentina Levi"
 date: "2024-11-01"
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -10,12 +12,12 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 #### Investigation Question: 
-Do regions in northern Scotland, which experience longer winter nights, show higher seasonal increases in antidepressant prescriptions compared to southern regions?
+Do regions in Northern Scotland, which experience longer winter nights, show higher seasonal increases in antidepressant prescriptions compared to Southern regions?
 
 #### Introduction
 Seasonal Affective Disorder (SAD) is a type of depression that occurs during certain seasons, usually fall or winter.
 
-We can therefore hypothesise that regions in northern Scotland, with more intense seasonal changes and longer winters, may experience higher prescription rates of antidepressants during winter months due to SAD. 
+I want to assess whether the regions in Northern Scotland, with more intense seasonal changes and longer winters, experience higher prescription rates of antidepressants than the during winter months as a result of SAD. 
 
 The data that will be used is "Prescriptions in the Community" from NHS Public Health Scotland. I have chosen to use the year 2023 because it is the most recent complete year with all 4 seasons. 
 
@@ -31,6 +33,7 @@ library(readr)
 library(dplyr)
 library(sf)
 library(viridis) 
+library(gt)
 
 #Reading in healthboards data
 healthboards <- read.csv(here("data/healthboards.csv")) %>% 
@@ -150,6 +153,7 @@ joined_2023 <- full_join(healthboards,combined_2023, by = join_by(hb == hbt))
 ```
 
 #### Filtering the data to focus on antidepressants.
+
 From research online I have discovered that the typical antidepressants prescribed for people diagnosed with SAD are selective serotonin reuptake inhibitors (SSRIs). In particular, sertraline and fluoxetine. 
 
 ```{r}
@@ -194,8 +198,10 @@ prescription_rates <- joined_data %>%
 ```
 
 
+#### Creating Mapped Graph to present the data
+
 ```{r}
-# Load spatial data and standardize the column
+# Load spatial data and standardisee the column name
 NHS_healthboards <- st_read("~/Desktop/data_science/B208015/data/NHS_healthboards_2019.shp") %>%
   rename(hb_name = HBName) %>%
   mutate(hb_name = paste("NHS", hb_name))
@@ -211,8 +217,8 @@ map_plot <- ggplot(data = prescription_rates_map) +
   facet_wrap(~ Season, ncol = 2) +
   theme_minimal() +
   labs(
-    title = "Seasonal Antidepressant Prescription Rates per Person by Health Board",
-    subtitle = "Comparison of Northern and Southern Scotland Regions by Season",
+    title = "Seasonal Antidepressant Prescription Rates per\nPerson by Health Board",
+    subtitle = "Comparison of Northern and Southern Scotland",
     caption = "Data source: NHS Scotland"
   ) +
   theme(
@@ -221,12 +227,73 @@ map_plot <- ggplot(data = prescription_rates_map) +
     panel.grid = element_blank(),
     strip.background = element_rect(fill = "lightblue", color = "black"),
     strip.text = element_text(size = 12, face = "bold"),
-    legend.position = "bottom"
+    legend.position = "bottom",
   )
 
 # Display the plot
 print(map_plot)
 ```
+
+
+#### Creating tables to present data
+
+```{r}
+# Prepare the data for the North and South tables 
+north_table <- prescription_rates %>%
+  filter(Region == "Northern") %>%
+  select(hb_name, Season, prescriptions_per_person) %>%
+  pivot_wider(names_from = hb_name, values_from = prescriptions_per_person) %>%
+  arrange(Season)
+
+south_table <- prescription_rates %>%
+  filter(Region == "Southern") %>%
+  select(hb_name, Season, prescriptions_per_person) %>%
+  pivot_wider(names_from = hb_name, values_from = prescriptions_per_person) %>%
+  arrange(Season)
+
+# Create the Northern table with gt
+north_table_gt <- north_table %>%
+  gt() %>%
+  tab_header(
+    title = "Northern Scotland NHS Healthboards Antidepressant Prescription Data per person"
+  ) %>%
+  cols_label(
+    Season = "Season"
+  ) %>%
+  fmt_number(
+    columns = everything(),
+    decimals = 2
+  )
+
+# Create the Southern table with gt
+south_table_gt <- south_table %>%
+  gt() %>%
+  tab_header(
+    title = "Southern Scotland NHS Healthboards Antidepressant Prescription Data per person"
+  ) %>%
+  cols_label(
+    Season = "Season"
+  ) %>%
+  fmt_number(
+    columns = everything(),
+    decimals = 2
+  )
+
+# Display the Northern and Southern tables 
+north_table_gt
+south_table_gt
+
+```
+
+This analysis demonstrates that antidepressant prescription rates actually tend to be higher in Southern Scotland and are actually lowest in the winter season. This reveals that although Seasonal Affective Disorder (SAD) is associated with reduced daylight during winter months, its prevalence and the prescription of antidepressants do not consistently increase with latitide. This highlights that factors beyond daylight duration (as a result of seasons), such as genetic predispositions, environmental conditions, and individual sensitivity to light changes, play significant roles in the occurrence of SAD. 
+
+Additionally, some people experience "reverse SAD," where they feel low during the summer months instead of winter. This could be linked to disruptions in their circadian rhythm due to extended daylight hours, higher temperatures, or changes in routine. It’s a complex interplay of biological, psychological, and environmental factors that could explain why SAD affects people differently.
+
+The reasons for higher antidepressant prescription rates in southern Scotland, compared to northern regions, could be linked to several factors instead of seasonal affective disorder. These include:
+
+- Population Density and Accessibility of Services: Southern Scotland has more urban areas, particularly around cities like Glasgow and Edinburgh, where people might have greater access to mental health services and are therefore more likely to receive antidepressant prescriptions. Rural regions often have less access to mental health services, potentially lowering prescription rates.
+
+- Environmental and Lifestyle Differences: Although northern Scotland experiences longer winter nights, factors like weather patterns, lifestyle, and occupational stress in the southern areas might contribute to a different type of mental health stress, unrelated to Seasonal Affective Disorder but still resulting in a need for antidepressants.
 
 
 
