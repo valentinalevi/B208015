@@ -1,7 +1,7 @@
 ---
 title: "Assessment"
 author: "Valentina Levi"
-date: "2024-11-01"
+date: "2024-11-20"
 output:
   html_document: default
   pdf_document: default
@@ -19,27 +19,23 @@ Seasonal Affective Disorder (SAD) is a mood disorder characterised by depressive
 
 I want to assess whether the regions in Northern Scotland experience higher prescription rates of antidepressants than regions in Southern Scorland as a result of reduced daylight/sunlight causing SAD in individualds during the winter season.
 
-The data that will be used is "Prescriptions in the Community" from NHS Public Health Scotland. I have chosen to use the year 2022 because 
-
-it is the most recent complete year with all 4 seasons. Accessible at https://www.opendata.nhs.scot/dataset/prescriptions-in-the-community.
+The data that will be used is "Prescriptions in the Community" from NHS Public Health Scotland. I have chosen to use the year 2023 because it is the most recent complete year with all 4 seasons. Accessible at https://www.opendata.nhs.scot/dataset/prescriptions-in-the-community.
 
 The Health Boards Area (2019) data from Scotland's Census will be used and each healthboard will be defined as either part of the northern or southern regions in Scotland. Accessible at https://www.scotlandscensus.gov.uk/webapi/jsf/tableView/tableView.xhtml.
 
 #### Loading in the data sets, creating seasons and joining healthboard data to prescription data
 
 ```{r}
-library(tidyverse)
+library(tidyverse) # Loads tidyverse packages (includes ggplot2, dplyr, tidyr)
 library(janitor) # For cleaning the data
 library(gt) # For tables
 library(here) # For directory structure
-library(readr)
-library(dplyr)
-library(sf)
-library(viridis) 
-library(purrr)
-library(tidyr)
+library(readr) # For reading csv files
+library(sf) # Handles spatial data for mapping
+library(viridis) # For colour palettes
+library(purrr) # Tools to tidy data (e.g. reshape data frames wide to long)
 
-#Reading in healthboards data
+# Reading in healthboards data
 healthboards <- read_csv(here("data/healthboards.csv")) %>% 
   clean_names()
 
@@ -63,7 +59,7 @@ month_pattern <- "january|february|march|april|may|june|july|august|september|oc
 # List only files matching the month names
 monthly_files <- list.files(
   path = here("data"),
-  pattern = month_pattern,
+  pattern = month_pattern, # Using pattern 
   full.names = TRUE,
   ignore.case = TRUE 
 )
@@ -72,10 +68,10 @@ monthly_files <- list.files(
 process_monthly_data <- function(file_path) {
   read_csv(file_path) %>%
     clean_names() %>%
-    select(-any_of("dmd_code")) %>%  # Drop `dmd_code` only if it exists
+    select(-any_of("dmd_code")) %>%  # Get rid of `dmd_code` if it exists
     mutate(
       month = as.integer(substr(paid_date_month, 5, 6)),
-      Season = case_when(
+      Season = case_when( #Assign season based on month
         month %in% c(12, 1, 2) ~ "Winter",
         month %in% c(3, 4, 5) ~ "Spring",
         month %in% c(6, 7, 8) ~ "Summer",
@@ -85,10 +81,10 @@ process_monthly_data <- function(file_path) {
 }
 
 # Read and combine the monthly files
-prescription_data <- map_df(monthly_files, process_monthly_data)
+prescription_monthly <- map_df(monthly_files, process_monthly_data)
 
-# Join Prescription Data with Health Board Data
-joined_2023 <- full_join(healthboards, prescription_data, by = join_by(hb == hbt))
+# Join prescription data with Healthboard Data
+prescription_hb <- full_join(healthboards, prescription_monthly, by = join_by(hb == hbt))
 
 ```
 
@@ -97,7 +93,7 @@ From research online I have discovered that the typical antidepressants prescrib
 
 ```{r}
 # Filtering out only the data with fluoxetine and sertaline in the description of the drug 
-antidepressant_2023 <- joined_2023 %>%
+antidepressant_2023 <- prescription_hb %>%
   filter(
     str_detect(bnf_item_description, "FLUOXETINE") | 
     str_detect(bnf_item_description, "SERTRALINE")
@@ -109,9 +105,10 @@ antidepressant_2023 <- joined_2023 %>%
 It is important to calculate the prescription (rates) per person because some healthboards have more people living in them than others.
 
 ```{r}
+# Calculate seasonal totals for antidepressant prescriptions in 2023
 seasonal_totals <- antidepressant_2023 %>%
   group_by(hb_name, Region, Season) %>%
-  summarise(Total_Prescriptions = sum(paid_quantity, na.rm = TRUE)) %>%
+  summarise(Total_Prescriptions = sum(paid_quantity, na.rm = TRUE)) %>% 
   ungroup()
 
 
@@ -121,18 +118,18 @@ population <- read_csv(here("data/UV103_age_health_board_census.csv"), skip = 10
 rename(Spare = "...6",
        hb_name = "Health Board Area 2019",
        hb_population = Count) %>% 
-  # Filter the data so that we get the population of the entire health board
+# Filter the data so that we get the population of the entire health board
 filter(Age == "All people" & Sex == "All people") %>% 
-  # Select only the relevant columns
+# Select only the relevant columns
 select(hb_name, hb_population) %>% 
 # Change health board names so they match the prescription data
 mutate(hb_name = paste("NHS", hb_name))
 
 #Joining population data and the total antidepressant prescriptions for Fluoxetine and Sertraline by healthbaord, season and region
-joined_data <- full_join(population,seasonal_totals, by = join_by(hb_name))
+antidepressant_population <- full_join(population,seasonal_totals, by = join_by(hb_name))
 
 # Calculate the prescription rate per person by healthboard, season and region.
-prescription_rates <- joined_data %>%
+prescription_rates <- antidepressant_population %>%
   mutate(prescriptions_per_person = Total_Prescriptions / hb_population)
 ```
 
@@ -153,27 +150,26 @@ NHS_healthboards <- st_read("~/Desktop/data_science/B208015/data/NHS_healthboard
   rename(hb_name = HBName) %>%
   mutate(hb_name = paste("NHS", hb_name))
 
-# Join data
+# Join prescriptions rates and healthboard data (with spatial data for creating map)
 prescription_rates_map <- NHS_healthboards %>%
   left_join(prescription_rates, by = "hb_name")
 
-# Map Plot
+# Creating map plot of healthboards in Scotland
 map_plot <- ggplot(data = prescription_rates_map) +
   geom_sf(aes(fill = prescriptions_per_person), color = "black", linewidth = 0.2) +
-  scale_fill_viridis(name = "Prescriptions per Person", option = "C", labels = scales::comma) +
-  facet_wrap(~ Season, ncol = 2) +
+  scale_fill_viridis(name = "Average Prescriptions per Person", option = "C", labels = scales::comma) + # Use a colour scale
+  facet_wrap(~ Season, ncol = 2) + # Create facets for each season
   theme_minimal() +
   labs(
-    title = "Seasonal Antidepressant Prescription Rates per\nPerson by Health Board",
+    title = "Seasonal Average Antidepressant Prescription Rates per\nPerson by Health Board",
     subtitle = "Comparison of Northern and Southern Scotland",
-    caption = "Data source: NHS Scotland"
+    caption = "Data source: NHS Scotland 2023"
   ) +
   theme(
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    panel.grid = element_blank(),
-    strip.background = element_rect(fill = "lightblue", color = "black"),
-    strip.text = element_text(size = 12, face = "bold"),
+    axis.text = element_blank(), # Remove axis text
+    panel.grid = element_blank(), # Remove grid lines for a cleaner map
+    strip.background = element_rect(fill = "grey90", color = "black"),
+    strip.text = element_text(size = 12, face = "bold"), # Adjusting style of facet labels
     legend.position = "bottom",
   )
 
@@ -191,17 +187,17 @@ Sunlight hours follow an expected pattern, peaking in summer and hitting their l
 
 ```{r}
 # Function to process Met Office sunshine data
-process_sunshine <- function(url, year_filter = 2022) {
-  read_table(url, skip = 5) %>%
-    filter(year == year_filter) %>%
-    pivot_longer(
-      cols = jan:dec,
-      names_to = "month",
-      values_to = "sunshine_hours"
+process_sunshine <- function(url, year_filter = 2023) {
+  read_table(url, skip = 5) %>% # Read the table from the URL, skipping the first 5 rows (headings - not part of data)
+    filter(year == year_filter) %>% # Filter data for year specified (2023)
+    pivot_longer( # Reshape the data from wide to long
+      cols = jan:dec, # The columns represent monthly data
+      names_to = "month", # Create a new column called "month" from the column names
+      values_to = "sunshine_hours" # Create a new column called "sunshine_hours"
     ) %>%
     mutate(
       month = factor(month, levels = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")),
-      season = case_when(
+      season = case_when( # Create a new "season" column based on the month (specifying which month is which season)
         month %in% c("dec", "jan", "feb") ~ "Winter",
         month %in% c("mar", "apr", "may") ~ "Spring",
         month %in% c("jun", "jul", "aug") ~ "Summer",
@@ -225,28 +221,27 @@ gt_table <- function(prescription_data, title) {
       Season = "Season",
       avg_sunlight_hours = "Avg Sunlight (Hours)"
     ) %>%
-    fmt_number(columns = everything(), decimals = 2) %>%
-# Make column headers bold
+    fmt_number(columns = everything(), decimals = 2) %>% # Round everything to 2 decimal places
+# Make column headers bold to stand out 
     tab_style(
       style = cell_text(weight = "bold"),
       locations = cells_column_labels(everything())
     ) %>%
-# Make certain columns bold (e.g., Avg Sunlight Hours and Season)
+# Make Season and Average Sunlight hours colums bold too
     tab_style(
       style = cell_text(weight = "bold"),
       locations = cells_body(columns = c(Season, avg_sunlight_hours))
     ) %>%
-# Add row striping for better readability
+# Add row striping to make the table more readable
     opt_row_striping() %>%
-# Adjust font size and row padding
+# Adjust the font size and align headings
     tab_options(
       table.font.size = px(14),
-      data_row.padding = px(10),
       heading.align = "center"
     )
 }
 
-# Northern Scotland Sunshine Data URL
+# MET Northern Scotland Sunshine Data URL
 northern_sunshine_url <- "https://www.metoffice.gov.uk/pub/data/weather/uk/climate/datasets/Sunshine/date/Scotland_N.txt"
 
 # Process Northern sunshine data
@@ -262,13 +257,13 @@ northern_prescription_rates <- prescription_rates %>%
   filter(Region == "Northern") %>%
   left_join(northern_seasonal_sunshine, by = c("Season" = "season"))
 
-# Generate GT table for Northern Scotland
+# GT table for Northern Scotland
 northern_gt_table <- gt_table(
   northern_prescription_rates,
-  "Northern Scotland NHS Healthboards Antidepressant Prescription Data per Person"
+  "Northern Scotland NHS Healthboards Average Antidepressant Prescription Data per Person in 2023"
 )
 
-# Southern Scotland Sunshine Data URLs
+# MET Southern Scotland Sunshine Data URLs
 east_sunshine_url <- "https://www.metoffice.gov.uk/pub/data/weather/uk/climate/datasets/Sunshine/date/Scotland_E.txt"
 west_sunshine_url <- "https://www.metoffice.gov.uk/pub/data/weather/uk/climate/datasets/Sunshine/date/Scotland_W.txt"
 
@@ -293,7 +288,7 @@ southern_prescription_rates <- prescription_rates %>%
 # Generate GT table for Southern Scotland
 southern_gt_table <- gt_table(
   southern_prescription_rates,
-  "Southern Scotland NHS Healthboards Antidepressant Prescription Data per Person"
+  "Southern Scotland NHS Healthboards Antidepressant Prescription Data per Person in 2023"
 )
 
 # Display GT tables
@@ -313,30 +308,30 @@ In Southern Scotland, the antidepressant prescription rates are generally higher
 # Generating bright colour for each healthboard
 bright_colors <- scales::hue_pal()(length(unique(prescription_rates$hb_name)))
 
-# Line plot 
+# Creating line plot of prescription rates across seasons - showing each healthboard
 line_plot <- prescription_rates %>%
   ggplot(aes(x = Season, y = prescriptions_per_person, group = hb_name, color = hb_name)) +
   geom_line(linewidth = 0.5) +
   geom_point(size = 1.5) +
-  scale_color_manual(values = bright_colors, name = "Health Board") +
-  scale_y_continuous(
+  scale_color_manual(values = bright_colors, name = "Health Board") + # Using the custom colour palette for the healthboards
+  scale_y_continuous( # Customising the y-axis
     name = "Prescriptions per Person",
-    breaks = seq(floor(min(prescription_rates$prescriptions_per_person)), 
+    breaks = seq(floor(min(prescription_rates$prescriptions_per_person)),  # Defining y axis breaks
                  ceiling(max(prescription_rates$prescriptions_per_person)), 
                  by = 0.5), 
-    limits = c(floor(min(prescription_rates$prescriptions_per_person)), 
+    limits = c(floor(min(prescription_rates$prescriptions_per_person)), # Setting axis limits
                ceiling(max(prescription_rates$prescriptions_per_person)))  
   ) +
   labs(
-    title = "Seasonal Trends in Antidepressant Prescription Rates by Health Board",
+    title = "Seasonal Trends in Average Antidepressant Prescription Rates by Health Board in 2023",
     subtitle = "Each health board represented by a distinct line",
     x = "Season",
-    y = "Prescriptions per Person",
+    y = "Average Prescriptions per Person",
     color = "Health Board"
   ) +
-  facet_wrap(~ Region, ncol = 1, scales = "fixed") + 
+  facet_wrap(~ Region, ncol = 1, scales = "fixed") + # Separate panel for North and South regions
   theme_minimal() +
-  theme(
+  theme( # Styling the text 
     legend.position = "bottom",
     legend.text = element_text(size = 8),
     legend.title = element_text(size = 10, face = "bold"),
@@ -350,8 +345,6 @@ line_plot <- prescription_rates %>%
 
 # Display the plot
 print(line_plot)
-
-
 ```
 
 
