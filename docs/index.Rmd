@@ -38,7 +38,7 @@ library(purrr)
 library(tidyr)
 
 #Reading in healthboards data
-healthboards <- read.csv(here("data/healthboards.csv")) %>% 
+healthboards <- read_csv(here("data/healthboards.csv")) %>% 
   clean_names()
 
 # Define northern and southern regions based on Health Boards
@@ -55,100 +55,38 @@ healthboards <- healthboards %>%
     TRUE ~ "Other"
   ))
 
-#Reading in prescriptions data from each month in the year 2023.
-january <- read.csv(here("data/january.csv")) %>% 
-  clean_names()
+# Define a pattern to match month files
+month_pattern <- "january|february|march|april|may|june|july|august|september|october|november|december"
 
-february <- read.csv(here("data/february.csv")) %>% 
-  clean_names()
-
-march <- read.csv(here("data/march.csv")) %>% 
-  clean_names()
-
-april <- read.csv(here("data/april.csv")) %>% 
-  clean_names()
-
-may <- read.csv(here("data/may.csv")) %>% 
-  clean_names()
-
-june <- read.csv(here("data/june.csv")) %>% 
-  clean_names()
-
-july <- read.csv(here("data/july.csv")) %>% 
-  clean_names()
-
-august <- read.csv(here("data/august.csv")) %>% 
-  clean_names()
-
-september <- read.csv(here("data/september.csv")) %>% 
-  clean_names()
-
-october <- read.csv(here("data/october.csv")) %>% 
-  clean_names()
-
-november <- read.csv(here("data/november.csv")) %>% 
-  clean_names()
-
-december <- read.csv(here("data/december.csv")) %>% 
-  clean_names()
-
-# List of monthly data frames
-monthly_data <- list(
-  january %>% mutate(Month = 1),
-  february %>% mutate(Month = 2),
-  march %>% mutate(Month = 3),
-  april %>% mutate(Month = 4),
-  may %>% mutate(Month = 5),
-  june %>% mutate(Month = 6),
-  july %>% mutate(Month = 7),
-  august %>% mutate(Month = 8),
-  september %>% mutate(Month = 9),
-  october %>% mutate(Month = 10),
-  november %>% mutate(Month = 11),
-  december %>% mutate(Month = 12)
+# List only files matching the month names
+monthly_files <- list.files(
+  path = here("data"),
+  pattern = month_pattern,
+  full.names = TRUE,
+  ignore.case = TRUE 
 )
 
-# Combine datasets for each season
+# Define the processing function
+process_monthly_data <- function(file_path) {
+  read_csv(file_path) %>%
+    clean_names() %>%
+    select(-any_of("dmd_code")) %>%  # Drop `dmd_code` only if it exists
+    mutate(
+      month = as.integer(substr(paid_date_month, 5, 6)),
+      Season = case_when(
+        month %in% c(12, 1, 2) ~ "Winter",
+        month %in% c(3, 4, 5) ~ "Spring",
+        month %in% c(6, 7, 8) ~ "Summer",
+        month %in% c(9, 10, 11) ~ "Autumn"
+      )
+    )
+}
 
-# Winter: December, January, February
-winter <- bind_rows(
-  january %>% mutate(Month = 1),
-  february %>% mutate(Month = 2),
-  december %>% mutate(Month = 12)
-) %>% mutate(Season = "Winter")
+# Read and combine the monthly files
+prescription_data <- map_df(monthly_files, process_monthly_data)
 
-# Spring: March, April, May
-spring <- bind_rows(
-  march %>% mutate(Month = 3),
-  april %>% mutate(Month = 4),
-  may %>% mutate(Month = 5)
-) %>% mutate(Season = "Spring")
-
-#Summer: June, July, August
-summer <- bind_rows(
-  june %>% mutate(Month = 6, dmd_code = as.character(dmd_code)),
-  july %>% mutate(Month = 7, dmd_code = as.character(dmd_code)),
-  august %>% mutate(Month = 8, dmd_code = as.character(dmd_code))
-) %>% mutate(Season = "Summer")
-
-# Autumn: September, October, November
-autumn <- bind_rows(
-  september %>% mutate(Month = 9),
-  october %>% mutate(Month = 10),
-  november %>% mutate(Month = 11)
-) %>% mutate(Season = "Autumn")
-
-# Removing the `dmd_code` column from each seasonal dataset
-winter <- winter %>% select(-dmd_code)
-spring <- spring %>% select(-dmd_code)
-summer <- summer %>% select(-dmd_code)
-autumn <- autumn %>% select(-dmd_code)
-
-# Combine all seasonal data sets into one
-combined_2023 <- bind_rows(winter, spring, summer, autumn)
-
-#Joining the combined seasonal data to the healthboard data
-joined_2023 <- full_join(healthboards,combined_2023, by = join_by(hb == hbt))
+# Join Prescription Data with Health Board Data
+joined_2023 <- full_join(healthboards, prescription_data, by = join_by(hb == hbt))
 
 ```
 
@@ -275,7 +213,25 @@ gt_table <- function(prescription_data, title) {
       Season = "Season",
       avg_sunlight_hours = "Avg Sunlight (Hours)"
     ) %>%
-    fmt_number(columns = everything(), decimals = 2)
+    fmt_number(columns = everything(), decimals = 2) %>%
+# Make column headers bold
+    tab_style(
+      style = cell_text(weight = "bold"),
+      locations = cells_column_labels(everything())
+    ) %>%
+# Make certain columns bold (e.g., Avg Sunlight Hours and Season)
+    tab_style(
+      style = cell_text(weight = "bold"),
+      locations = cells_body(columns = c(Season, avg_sunlight_hours))
+    ) %>%
+# Add row striping for better readability
+    opt_row_striping() %>%
+# Adjust font size and row padding
+    tab_options(
+      table.font.size = px(14),
+      data_row.padding = px(10),
+      heading.align = "center"
+    )
 }
 
 # Northern Scotland Sunshine Data URL
@@ -331,12 +287,11 @@ southern_gt_table <- gt_table(
 # Display GT tables
 northern_gt_table
 southern_gt_table
-
 ```
 
 #### Line graph showing how the average prescription per person changes across the 4 seasons for each healthboard
 
-Here we can more specifically see which healthboards have the highest and lowest rates of antidepressant prescriptions.
+Here we can more specifically see which healthboards have the highest and lowest rates of antidepressant prescriptions across the seasons.
 
 ```{r, fig.width=10, fig.height=6, out.width="100%"}
 # Generating bright colour for each healthboard
@@ -399,9 +354,10 @@ Additionally, although northern Scotland experiences longer winter nights, facto
 
 Another key limitation is that there are alternative therapies used to treat SAD other than just antidepressant prescriptions such as light therapy and cognitive behavior therapy (Galima, Vogel and Kowalski, 2020).
 
+Finally, it is important to take into consideration that some people will collect prescriptions to. last them the next few months so they could be collected antidepressants for SAD in autumn to last them through the winter. This limitation could affect the results making the prescription rate low for winter when in fact more people could be taking antidepressants at this time.
 
 #### Next Steps:
-Analysing the other potential factors that influence antidepressant prescriptions. Exploring datasets on sex as SAD is more prevelant in females , weather patterns (e.g. rainfall), population genetics, levels of stress, access to mental health services and therefore receiving diagnosis / prescription.
+Analysing the other potential factors that influence antidepressant prescriptions. This includes exploring datasets on sex (SAD is more prevelant in females) , weather patterns (e.g. rainfall), population genetics, levels of stress, access to mental health services and therefore receiving diagnosis / prescription. It would also be interesting to analyse data that is exclusively the antidepressant presciptions for SAD. 
 
 
 #### References:

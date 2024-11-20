@@ -400,7 +400,7 @@ library(purrr)
 library(tidyr)
 
 #Reading in healthboards data
-healthboards &lt;- read.csv(here(&quot;data/healthboards.csv&quot;)) %&gt;% 
+healthboards &lt;- read_csv(here(&quot;data/healthboards.csv&quot;)) %&gt;% 
   clean_names()
 
 # Define northern and southern regions based on Health Boards
@@ -417,100 +417,38 @@ healthboards &lt;- healthboards %&gt;%
     TRUE ~ &quot;Other&quot;
   ))
 
-#Reading in prescriptions data from each month in the year 2023.
-january &lt;- read.csv(here(&quot;data/january.csv&quot;)) %&gt;% 
-  clean_names()
+# Define a pattern to match month files
+month_pattern &lt;- &quot;january|february|march|april|may|june|july|august|september|october|november|december&quot;
 
-february &lt;- read.csv(here(&quot;data/february.csv&quot;)) %&gt;% 
-  clean_names()
-
-march &lt;- read.csv(here(&quot;data/march.csv&quot;)) %&gt;% 
-  clean_names()
-
-april &lt;- read.csv(here(&quot;data/april.csv&quot;)) %&gt;% 
-  clean_names()
-
-may &lt;- read.csv(here(&quot;data/may.csv&quot;)) %&gt;% 
-  clean_names()
-
-june &lt;- read.csv(here(&quot;data/june.csv&quot;)) %&gt;% 
-  clean_names()
-
-july &lt;- read.csv(here(&quot;data/july.csv&quot;)) %&gt;% 
-  clean_names()
-
-august &lt;- read.csv(here(&quot;data/august.csv&quot;)) %&gt;% 
-  clean_names()
-
-september &lt;- read.csv(here(&quot;data/september.csv&quot;)) %&gt;% 
-  clean_names()
-
-october &lt;- read.csv(here(&quot;data/october.csv&quot;)) %&gt;% 
-  clean_names()
-
-november &lt;- read.csv(here(&quot;data/november.csv&quot;)) %&gt;% 
-  clean_names()
-
-december &lt;- read.csv(here(&quot;data/december.csv&quot;)) %&gt;% 
-  clean_names()
-
-# List of monthly data frames
-monthly_data &lt;- list(
-  january %&gt;% mutate(Month = 1),
-  february %&gt;% mutate(Month = 2),
-  march %&gt;% mutate(Month = 3),
-  april %&gt;% mutate(Month = 4),
-  may %&gt;% mutate(Month = 5),
-  june %&gt;% mutate(Month = 6),
-  july %&gt;% mutate(Month = 7),
-  august %&gt;% mutate(Month = 8),
-  september %&gt;% mutate(Month = 9),
-  october %&gt;% mutate(Month = 10),
-  november %&gt;% mutate(Month = 11),
-  december %&gt;% mutate(Month = 12)
+# List only files matching the month names
+monthly_files &lt;- list.files(
+  path = here(&quot;data&quot;),
+  pattern = month_pattern,
+  full.names = TRUE,
+  ignore.case = TRUE 
 )
 
-# Combine datasets for each season
+# Define the processing function
+process_monthly_data &lt;- function(file_path) {
+  read_csv(file_path) %&gt;%
+    clean_names() %&gt;%
+    select(-any_of(&quot;dmd_code&quot;)) %&gt;%  # Drop `dmd_code` only if it exists
+    mutate(
+      month = as.integer(substr(paid_date_month, 5, 6)),
+      Season = case_when(
+        month %in% c(12, 1, 2) ~ &quot;Winter&quot;,
+        month %in% c(3, 4, 5) ~ &quot;Spring&quot;,
+        month %in% c(6, 7, 8) ~ &quot;Summer&quot;,
+        month %in% c(9, 10, 11) ~ &quot;Autumn&quot;
+      )
+    )
+}
 
-# Winter: December, January, February
-winter &lt;- bind_rows(
-  january %&gt;% mutate(Month = 1),
-  february %&gt;% mutate(Month = 2),
-  december %&gt;% mutate(Month = 12)
-) %&gt;% mutate(Season = &quot;Winter&quot;)
+# Read and combine the monthly files
+prescription_data &lt;- map_df(monthly_files, process_monthly_data)
 
-# Spring: March, April, May
-spring &lt;- bind_rows(
-  march %&gt;% mutate(Month = 3),
-  april %&gt;% mutate(Month = 4),
-  may %&gt;% mutate(Month = 5)
-) %&gt;% mutate(Season = &quot;Spring&quot;)
-
-#Summer: June, July, August
-summer &lt;- bind_rows(
-  june %&gt;% mutate(Month = 6, dmd_code = as.character(dmd_code)),
-  july %&gt;% mutate(Month = 7, dmd_code = as.character(dmd_code)),
-  august %&gt;% mutate(Month = 8, dmd_code = as.character(dmd_code))
-) %&gt;% mutate(Season = &quot;Summer&quot;)
-
-# Autumn: September, October, November
-autumn &lt;- bind_rows(
-  september %&gt;% mutate(Month = 9),
-  october %&gt;% mutate(Month = 10),
-  november %&gt;% mutate(Month = 11)
-) %&gt;% mutate(Season = &quot;Autumn&quot;)
-
-# Removing the `dmd_code` column from each seasonal dataset
-winter &lt;- winter %&gt;% select(-dmd_code)
-spring &lt;- spring %&gt;% select(-dmd_code)
-summer &lt;- summer %&gt;% select(-dmd_code)
-autumn &lt;- autumn %&gt;% select(-dmd_code)
-
-# Combine all seasonal data sets into one
-combined_2023 &lt;- bind_rows(winter, spring, summer, autumn)
-
-#Joining the combined seasonal data to the healthboard data
-joined_2023 &lt;- full_join(healthboards,combined_2023, by = join_by(hb == hbt))</code></pre>
+# Join Prescription Data with Health Board Data
+joined_2023 &lt;- full_join(healthboards, prescription_data, by = join_by(hb == hbt))</code></pre>
 </div>
 <div id="filtering-the-data-to-focus-on-antidepressants" class="section level4">
 <h4>Filtering the data to focus on antidepressants</h4>
@@ -645,7 +583,25 @@ gt_table &lt;- function(prescription_data, title) {
       Season = &quot;Season&quot;,
       avg_sunlight_hours = &quot;Avg Sunlight (Hours)&quot;
     ) %&gt;%
-    fmt_number(columns = everything(), decimals = 2)
+    fmt_number(columns = everything(), decimals = 2) %&gt;%
+# Make column headers bold
+    tab_style(
+      style = cell_text(weight = &quot;bold&quot;),
+      locations = cells_column_labels(everything())
+    ) %&gt;%
+# Make certain columns bold (e.g., Avg Sunlight Hours and Season)
+    tab_style(
+      style = cell_text(weight = &quot;bold&quot;),
+      locations = cells_body(columns = c(Season, avg_sunlight_hours))
+    ) %&gt;%
+# Add row striping for better readability
+    opt_row_striping() %&gt;%
+# Adjust font size and row padding
+    tab_options(
+      table.font.size = px(14),
+      data_row.padding = px(10),
+      heading.align = &quot;center&quot;
+    )
 }
 
 # Northern Scotland Sunshine Data URL
@@ -700,27 +656,27 @@ southern_gt_table &lt;- gt_table(
 
 # Display GT tables
 northern_gt_table</code></pre>
-<div id="slnqwkpyyx" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
-<style>#slnqwkpyyx table {
+<div id="rdvixxmtrg" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#rdvixxmtrg table {
 font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 -webkit-font-smoothing: antialiased;
 -moz-osx-font-smoothing: grayscale;
 }
-#slnqwkpyyx thead, #slnqwkpyyx tbody, #slnqwkpyyx tfoot, #slnqwkpyyx tr, #slnqwkpyyx td, #slnqwkpyyx th {
+#rdvixxmtrg thead, #rdvixxmtrg tbody, #rdvixxmtrg tfoot, #rdvixxmtrg tr, #rdvixxmtrg td, #rdvixxmtrg th {
 border-style: none;
 }
-#slnqwkpyyx p {
+#rdvixxmtrg p {
 margin: 0;
 padding: 0;
 }
-#slnqwkpyyx .gt_table {
+#rdvixxmtrg .gt_table {
 display: table;
 border-collapse: collapse;
 line-height: normal;
 margin-left: auto;
 margin-right: auto;
 color: #333333;
-font-size: 16px;
+font-size: 14px;
 font-weight: normal;
 font-style: normal;
 background-color: #FFFFFF;
@@ -738,11 +694,11 @@ border-left-style: none;
 border-left-width: 2px;
 border-left-color: #D3D3D3;
 }
-#slnqwkpyyx .gt_caption {
+#rdvixxmtrg .gt_caption {
 padding-top: 4px;
 padding-bottom: 4px;
 }
-#slnqwkpyyx .gt_title {
+#rdvixxmtrg .gt_title {
 color: #333333;
 font-size: 125%;
 font-weight: initial;
@@ -753,7 +709,7 @@ padding-right: 5px;
 border-bottom-color: #FFFFFF;
 border-bottom-width: 0;
 }
-#slnqwkpyyx .gt_subtitle {
+#rdvixxmtrg .gt_subtitle {
 color: #333333;
 font-size: 85%;
 font-weight: initial;
@@ -764,7 +720,7 @@ padding-right: 5px;
 border-top-color: #FFFFFF;
 border-top-width: 0;
 }
-#slnqwkpyyx .gt_heading {
+#rdvixxmtrg .gt_heading {
 background-color: #FFFFFF;
 text-align: center;
 border-bottom-color: #FFFFFF;
@@ -775,12 +731,12 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#slnqwkpyyx .gt_bottom_border {
+#rdvixxmtrg .gt_bottom_border {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#slnqwkpyyx .gt_col_headings {
+#rdvixxmtrg .gt_col_headings {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -794,7 +750,7 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#slnqwkpyyx .gt_col_heading {
+#rdvixxmtrg .gt_col_heading {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -813,7 +769,7 @@ padding-left: 5px;
 padding-right: 5px;
 overflow-x: hidden;
 }
-#slnqwkpyyx .gt_column_spanner_outer {
+#rdvixxmtrg .gt_column_spanner_outer {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -824,13 +780,13 @@ padding-bottom: 0;
 padding-left: 4px;
 padding-right: 4px;
 }
-#slnqwkpyyx .gt_column_spanner_outer:first-child {
+#rdvixxmtrg .gt_column_spanner_outer:first-child {
 padding-left: 0;
 }
-#slnqwkpyyx .gt_column_spanner_outer:last-child {
+#rdvixxmtrg .gt_column_spanner_outer:last-child {
 padding-right: 0;
 }
-#slnqwkpyyx .gt_column_spanner {
+#rdvixxmtrg .gt_column_spanner {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
@@ -841,10 +797,10 @@ overflow-x: hidden;
 display: inline-block;
 width: 100%;
 }
-#slnqwkpyyx .gt_spanner_row {
+#rdvixxmtrg .gt_spanner_row {
 border-bottom-style: hidden;
 }
-#slnqwkpyyx .gt_group_heading {
+#rdvixxmtrg .gt_group_heading {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -869,7 +825,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 text-align: left;
 }
-#slnqwkpyyx .gt_empty_group_heading {
+#rdvixxmtrg .gt_empty_group_heading {
 padding: 0.5px;
 color: #333333;
 background-color: #FFFFFF;
@@ -883,15 +839,15 @@ border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 vertical-align: middle;
 }
-#slnqwkpyyx .gt_from_md > :first-child {
+#rdvixxmtrg .gt_from_md > :first-child {
 margin-top: 0;
 }
-#slnqwkpyyx .gt_from_md > :last-child {
+#rdvixxmtrg .gt_from_md > :last-child {
 margin-bottom: 0;
 }
-#slnqwkpyyx .gt_row {
-padding-top: 8px;
-padding-bottom: 8px;
+#rdvixxmtrg .gt_row {
+padding-top: 10px;
+padding-bottom: 10px;
 padding-left: 5px;
 padding-right: 5px;
 margin: 10px;
@@ -907,7 +863,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 overflow-x: hidden;
 }
-#slnqwkpyyx .gt_stub {
+#rdvixxmtrg .gt_stub {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -919,7 +875,7 @@ border-right-color: #D3D3D3;
 padding-left: 5px;
 padding-right: 5px;
 }
-#slnqwkpyyx .gt_stub_row_group {
+#rdvixxmtrg .gt_stub_row_group {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -932,13 +888,13 @@ padding-left: 5px;
 padding-right: 5px;
 vertical-align: top;
 }
-#slnqwkpyyx .gt_row_group_first td {
+#rdvixxmtrg .gt_row_group_first td {
 border-top-width: 2px;
 }
-#slnqwkpyyx .gt_row_group_first th {
+#rdvixxmtrg .gt_row_group_first th {
 border-top-width: 2px;
 }
-#slnqwkpyyx .gt_summary_row {
+#rdvixxmtrg .gt_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -947,14 +903,14 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#slnqwkpyyx .gt_first_summary_row {
+#rdvixxmtrg .gt_first_summary_row {
 border-top-style: solid;
 border-top-color: #D3D3D3;
 }
-#slnqwkpyyx .gt_first_summary_row.thick {
+#rdvixxmtrg .gt_first_summary_row.thick {
 border-top-width: 2px;
 }
-#slnqwkpyyx .gt_last_summary_row {
+#rdvixxmtrg .gt_last_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -963,7 +919,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#slnqwkpyyx .gt_grand_summary_row {
+#rdvixxmtrg .gt_grand_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -972,7 +928,7 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#slnqwkpyyx .gt_first_grand_summary_row {
+#rdvixxmtrg .gt_first_grand_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -981,7 +937,7 @@ border-top-style: double;
 border-top-width: 6px;
 border-top-color: #D3D3D3;
 }
-#slnqwkpyyx .gt_last_grand_summary_row_top {
+#rdvixxmtrg .gt_last_grand_summary_row_top {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -990,10 +946,10 @@ border-bottom-style: double;
 border-bottom-width: 6px;
 border-bottom-color: #D3D3D3;
 }
-#slnqwkpyyx .gt_striped {
+#rdvixxmtrg .gt_striped {
 background-color: rgba(128, 128, 128, 0.05);
 }
-#slnqwkpyyx .gt_table_body {
+#rdvixxmtrg .gt_table_body {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -1001,7 +957,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#slnqwkpyyx .gt_footnotes {
+#rdvixxmtrg .gt_footnotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -1014,7 +970,7 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#slnqwkpyyx .gt_footnote {
+#rdvixxmtrg .gt_footnote {
 margin: 0px;
 font-size: 90%;
 padding-top: 4px;
@@ -1022,7 +978,7 @@ padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#slnqwkpyyx .gt_sourcenotes {
+#rdvixxmtrg .gt_sourcenotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -1035,64 +991,64 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#slnqwkpyyx .gt_sourcenote {
+#rdvixxmtrg .gt_sourcenote {
 font-size: 90%;
 padding-top: 4px;
 padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#slnqwkpyyx .gt_left {
+#rdvixxmtrg .gt_left {
 text-align: left;
 }
-#slnqwkpyyx .gt_center {
+#rdvixxmtrg .gt_center {
 text-align: center;
 }
-#slnqwkpyyx .gt_right {
+#rdvixxmtrg .gt_right {
 text-align: right;
 font-variant-numeric: tabular-nums;
 }
-#slnqwkpyyx .gt_font_normal {
+#rdvixxmtrg .gt_font_normal {
 font-weight: normal;
 }
-#slnqwkpyyx .gt_font_bold {
+#rdvixxmtrg .gt_font_bold {
 font-weight: bold;
 }
-#slnqwkpyyx .gt_font_italic {
+#rdvixxmtrg .gt_font_italic {
 font-style: italic;
 }
-#slnqwkpyyx .gt_super {
+#rdvixxmtrg .gt_super {
 font-size: 65%;
 }
-#slnqwkpyyx .gt_footnote_marks {
+#rdvixxmtrg .gt_footnote_marks {
 font-size: 75%;
 vertical-align: 0.4em;
 position: initial;
 }
-#slnqwkpyyx .gt_asterisk {
+#rdvixxmtrg .gt_asterisk {
 font-size: 100%;
 vertical-align: 0;
 }
-#slnqwkpyyx .gt_indent_1 {
+#rdvixxmtrg .gt_indent_1 {
 text-indent: 5px;
 }
-#slnqwkpyyx .gt_indent_2 {
+#rdvixxmtrg .gt_indent_2 {
 text-indent: 10px;
 }
-#slnqwkpyyx .gt_indent_3 {
+#rdvixxmtrg .gt_indent_3 {
 text-indent: 15px;
 }
-#slnqwkpyyx .gt_indent_4 {
+#rdvixxmtrg .gt_indent_4 {
 text-indent: 20px;
 }
-#slnqwkpyyx .gt_indent_5 {
+#rdvixxmtrg .gt_indent_5 {
 text-indent: 25px;
 }
-#slnqwkpyyx .katex-display {
+#rdvixxmtrg .katex-display {
 display: inline-flex !important;
 margin-bottom: 0.75em !important;
 }
-#slnqwkpyyx div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
+#rdvixxmtrg div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
 height: 0px !important;
 }
 </style>
@@ -1105,71 +1061,71 @@ height: 0px !important;
       <td colspan="7" class="gt_heading gt_subtitle gt_font_normal gt_bottom_border" style>Including Average Sunlight Hours per Season</td>
     </tr>
     <tr class="gt_col_headings">
-      <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" scope="col" id="Season">Season</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="avg_sunlight_hours">Avg Sunlight (Hours)</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Grampian">NHS Grampian</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Highland">NHS Highland</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Orkney">NHS Orkney</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Shetland">NHS Shetland</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Western-Isles">NHS Western Isles</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="Season">Season</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="avg_sunlight_hours">Avg Sunlight (Hours)</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Grampian">NHS Grampian</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Highland">NHS Highland</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Orkney">NHS Orkney</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Shetland">NHS Shetland</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Western-Isles">NHS Western Isles</th>
     </tr>
   </thead>
   <tbody class="gt_table_body">
-    <tr><td headers="Season" class="gt_row gt_left">Autumn</td>
-<td headers="avg_sunlight_hours" class="gt_row gt_right">76.73</td>
+    <tr><td headers="Season" class="gt_row gt_left" style="font-weight: bold;">Autumn</td>
+<td headers="avg_sunlight_hours" class="gt_row gt_right" style="font-weight: bold;">76.73</td>
 <td headers="NHS Grampian" class="gt_row gt_right">5.89</td>
 <td headers="NHS Highland" class="gt_row gt_right">6.25</td>
 <td headers="NHS Orkney" class="gt_row gt_right">5.74</td>
 <td headers="NHS Shetland" class="gt_row gt_right">5.72</td>
 <td headers="NHS Western Isles" class="gt_row gt_right">5.15</td></tr>
-    <tr><td headers="Season" class="gt_row gt_left">Spring</td>
-<td headers="avg_sunlight_hours" class="gt_row gt_right">140.67</td>
-<td headers="NHS Grampian" class="gt_row gt_right">6.13</td>
-<td headers="NHS Highland" class="gt_row gt_right">6.28</td>
-<td headers="NHS Orkney" class="gt_row gt_right">5.74</td>
-<td headers="NHS Shetland" class="gt_row gt_right">5.73</td>
-<td headers="NHS Western Isles" class="gt_row gt_right">5.18</td></tr>
-    <tr><td headers="Season" class="gt_row gt_left">Summer</td>
-<td headers="avg_sunlight_hours" class="gt_row gt_right">155.43</td>
+    <tr><td headers="Season" class="gt_row gt_left gt_striped" style="font-weight: bold;">Spring</td>
+<td headers="avg_sunlight_hours" class="gt_row gt_right gt_striped" style="font-weight: bold;">140.67</td>
+<td headers="NHS Grampian" class="gt_row gt_right gt_striped">6.13</td>
+<td headers="NHS Highland" class="gt_row gt_right gt_striped">6.28</td>
+<td headers="NHS Orkney" class="gt_row gt_right gt_striped">5.74</td>
+<td headers="NHS Shetland" class="gt_row gt_right gt_striped">5.73</td>
+<td headers="NHS Western Isles" class="gt_row gt_right gt_striped">5.18</td></tr>
+    <tr><td headers="Season" class="gt_row gt_left" style="font-weight: bold;">Summer</td>
+<td headers="avg_sunlight_hours" class="gt_row gt_right" style="font-weight: bold;">155.43</td>
 <td headers="NHS Grampian" class="gt_row gt_right">5.95</td>
 <td headers="NHS Highland" class="gt_row gt_right">6.26</td>
 <td headers="NHS Orkney" class="gt_row gt_right">5.78</td>
 <td headers="NHS Shetland" class="gt_row gt_right">5.72</td>
 <td headers="NHS Western Isles" class="gt_row gt_right">5.29</td></tr>
-    <tr><td headers="Season" class="gt_row gt_left">Winter</td>
-<td headers="avg_sunlight_hours" class="gt_row gt_right">32.50</td>
-<td headers="NHS Grampian" class="gt_row gt_right">5.73</td>
-<td headers="NHS Highland" class="gt_row gt_right">6.11</td>
-<td headers="NHS Orkney" class="gt_row gt_right">5.48</td>
-<td headers="NHS Shetland" class="gt_row gt_right">5.17</td>
-<td headers="NHS Western Isles" class="gt_row gt_right">5.17</td></tr>
+    <tr><td headers="Season" class="gt_row gt_left gt_striped" style="font-weight: bold;">Winter</td>
+<td headers="avg_sunlight_hours" class="gt_row gt_right gt_striped" style="font-weight: bold;">32.50</td>
+<td headers="NHS Grampian" class="gt_row gt_right gt_striped">5.73</td>
+<td headers="NHS Highland" class="gt_row gt_right gt_striped">6.11</td>
+<td headers="NHS Orkney" class="gt_row gt_right gt_striped">5.48</td>
+<td headers="NHS Shetland" class="gt_row gt_right gt_striped">5.17</td>
+<td headers="NHS Western Isles" class="gt_row gt_right gt_striped">5.17</td></tr>
   </tbody>
   
   
 </table>
 </div>
 <pre class="r"><code>southern_gt_table</code></pre>
-<div id="ybxedvmotd" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
-<style>#ybxedvmotd table {
+<div id="gsqnkoldxa" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#gsqnkoldxa table {
 font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 -webkit-font-smoothing: antialiased;
 -moz-osx-font-smoothing: grayscale;
 }
-#ybxedvmotd thead, #ybxedvmotd tbody, #ybxedvmotd tfoot, #ybxedvmotd tr, #ybxedvmotd td, #ybxedvmotd th {
+#gsqnkoldxa thead, #gsqnkoldxa tbody, #gsqnkoldxa tfoot, #gsqnkoldxa tr, #gsqnkoldxa td, #gsqnkoldxa th {
 border-style: none;
 }
-#ybxedvmotd p {
+#gsqnkoldxa p {
 margin: 0;
 padding: 0;
 }
-#ybxedvmotd .gt_table {
+#gsqnkoldxa .gt_table {
 display: table;
 border-collapse: collapse;
 line-height: normal;
 margin-left: auto;
 margin-right: auto;
 color: #333333;
-font-size: 16px;
+font-size: 14px;
 font-weight: normal;
 font-style: normal;
 background-color: #FFFFFF;
@@ -1187,11 +1143,11 @@ border-left-style: none;
 border-left-width: 2px;
 border-left-color: #D3D3D3;
 }
-#ybxedvmotd .gt_caption {
+#gsqnkoldxa .gt_caption {
 padding-top: 4px;
 padding-bottom: 4px;
 }
-#ybxedvmotd .gt_title {
+#gsqnkoldxa .gt_title {
 color: #333333;
 font-size: 125%;
 font-weight: initial;
@@ -1202,7 +1158,7 @@ padding-right: 5px;
 border-bottom-color: #FFFFFF;
 border-bottom-width: 0;
 }
-#ybxedvmotd .gt_subtitle {
+#gsqnkoldxa .gt_subtitle {
 color: #333333;
 font-size: 85%;
 font-weight: initial;
@@ -1213,7 +1169,7 @@ padding-right: 5px;
 border-top-color: #FFFFFF;
 border-top-width: 0;
 }
-#ybxedvmotd .gt_heading {
+#gsqnkoldxa .gt_heading {
 background-color: #FFFFFF;
 text-align: center;
 border-bottom-color: #FFFFFF;
@@ -1224,12 +1180,12 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#ybxedvmotd .gt_bottom_border {
+#gsqnkoldxa .gt_bottom_border {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#ybxedvmotd .gt_col_headings {
+#gsqnkoldxa .gt_col_headings {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -1243,7 +1199,7 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#ybxedvmotd .gt_col_heading {
+#gsqnkoldxa .gt_col_heading {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -1262,7 +1218,7 @@ padding-left: 5px;
 padding-right: 5px;
 overflow-x: hidden;
 }
-#ybxedvmotd .gt_column_spanner_outer {
+#gsqnkoldxa .gt_column_spanner_outer {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -1273,13 +1229,13 @@ padding-bottom: 0;
 padding-left: 4px;
 padding-right: 4px;
 }
-#ybxedvmotd .gt_column_spanner_outer:first-child {
+#gsqnkoldxa .gt_column_spanner_outer:first-child {
 padding-left: 0;
 }
-#ybxedvmotd .gt_column_spanner_outer:last-child {
+#gsqnkoldxa .gt_column_spanner_outer:last-child {
 padding-right: 0;
 }
-#ybxedvmotd .gt_column_spanner {
+#gsqnkoldxa .gt_column_spanner {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
@@ -1290,10 +1246,10 @@ overflow-x: hidden;
 display: inline-block;
 width: 100%;
 }
-#ybxedvmotd .gt_spanner_row {
+#gsqnkoldxa .gt_spanner_row {
 border-bottom-style: hidden;
 }
-#ybxedvmotd .gt_group_heading {
+#gsqnkoldxa .gt_group_heading {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -1318,7 +1274,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 text-align: left;
 }
-#ybxedvmotd .gt_empty_group_heading {
+#gsqnkoldxa .gt_empty_group_heading {
 padding: 0.5px;
 color: #333333;
 background-color: #FFFFFF;
@@ -1332,15 +1288,15 @@ border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 vertical-align: middle;
 }
-#ybxedvmotd .gt_from_md > :first-child {
+#gsqnkoldxa .gt_from_md > :first-child {
 margin-top: 0;
 }
-#ybxedvmotd .gt_from_md > :last-child {
+#gsqnkoldxa .gt_from_md > :last-child {
 margin-bottom: 0;
 }
-#ybxedvmotd .gt_row {
-padding-top: 8px;
-padding-bottom: 8px;
+#gsqnkoldxa .gt_row {
+padding-top: 10px;
+padding-bottom: 10px;
 padding-left: 5px;
 padding-right: 5px;
 margin: 10px;
@@ -1356,7 +1312,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 overflow-x: hidden;
 }
-#ybxedvmotd .gt_stub {
+#gsqnkoldxa .gt_stub {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -1368,7 +1324,7 @@ border-right-color: #D3D3D3;
 padding-left: 5px;
 padding-right: 5px;
 }
-#ybxedvmotd .gt_stub_row_group {
+#gsqnkoldxa .gt_stub_row_group {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -1381,13 +1337,13 @@ padding-left: 5px;
 padding-right: 5px;
 vertical-align: top;
 }
-#ybxedvmotd .gt_row_group_first td {
+#gsqnkoldxa .gt_row_group_first td {
 border-top-width: 2px;
 }
-#ybxedvmotd .gt_row_group_first th {
+#gsqnkoldxa .gt_row_group_first th {
 border-top-width: 2px;
 }
-#ybxedvmotd .gt_summary_row {
+#gsqnkoldxa .gt_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -1396,14 +1352,14 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#ybxedvmotd .gt_first_summary_row {
+#gsqnkoldxa .gt_first_summary_row {
 border-top-style: solid;
 border-top-color: #D3D3D3;
 }
-#ybxedvmotd .gt_first_summary_row.thick {
+#gsqnkoldxa .gt_first_summary_row.thick {
 border-top-width: 2px;
 }
-#ybxedvmotd .gt_last_summary_row {
+#gsqnkoldxa .gt_last_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -1412,7 +1368,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#ybxedvmotd .gt_grand_summary_row {
+#gsqnkoldxa .gt_grand_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -1421,7 +1377,7 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#ybxedvmotd .gt_first_grand_summary_row {
+#gsqnkoldxa .gt_first_grand_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -1430,7 +1386,7 @@ border-top-style: double;
 border-top-width: 6px;
 border-top-color: #D3D3D3;
 }
-#ybxedvmotd .gt_last_grand_summary_row_top {
+#gsqnkoldxa .gt_last_grand_summary_row_top {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -1439,10 +1395,10 @@ border-bottom-style: double;
 border-bottom-width: 6px;
 border-bottom-color: #D3D3D3;
 }
-#ybxedvmotd .gt_striped {
+#gsqnkoldxa .gt_striped {
 background-color: rgba(128, 128, 128, 0.05);
 }
-#ybxedvmotd .gt_table_body {
+#gsqnkoldxa .gt_table_body {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -1450,7 +1406,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#ybxedvmotd .gt_footnotes {
+#gsqnkoldxa .gt_footnotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -1463,7 +1419,7 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#ybxedvmotd .gt_footnote {
+#gsqnkoldxa .gt_footnote {
 margin: 0px;
 font-size: 90%;
 padding-top: 4px;
@@ -1471,7 +1427,7 @@ padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#ybxedvmotd .gt_sourcenotes {
+#gsqnkoldxa .gt_sourcenotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -1484,64 +1440,64 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#ybxedvmotd .gt_sourcenote {
+#gsqnkoldxa .gt_sourcenote {
 font-size: 90%;
 padding-top: 4px;
 padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#ybxedvmotd .gt_left {
+#gsqnkoldxa .gt_left {
 text-align: left;
 }
-#ybxedvmotd .gt_center {
+#gsqnkoldxa .gt_center {
 text-align: center;
 }
-#ybxedvmotd .gt_right {
+#gsqnkoldxa .gt_right {
 text-align: right;
 font-variant-numeric: tabular-nums;
 }
-#ybxedvmotd .gt_font_normal {
+#gsqnkoldxa .gt_font_normal {
 font-weight: normal;
 }
-#ybxedvmotd .gt_font_bold {
+#gsqnkoldxa .gt_font_bold {
 font-weight: bold;
 }
-#ybxedvmotd .gt_font_italic {
+#gsqnkoldxa .gt_font_italic {
 font-style: italic;
 }
-#ybxedvmotd .gt_super {
+#gsqnkoldxa .gt_super {
 font-size: 65%;
 }
-#ybxedvmotd .gt_footnote_marks {
+#gsqnkoldxa .gt_footnote_marks {
 font-size: 75%;
 vertical-align: 0.4em;
 position: initial;
 }
-#ybxedvmotd .gt_asterisk {
+#gsqnkoldxa .gt_asterisk {
 font-size: 100%;
 vertical-align: 0;
 }
-#ybxedvmotd .gt_indent_1 {
+#gsqnkoldxa .gt_indent_1 {
 text-indent: 5px;
 }
-#ybxedvmotd .gt_indent_2 {
+#gsqnkoldxa .gt_indent_2 {
 text-indent: 10px;
 }
-#ybxedvmotd .gt_indent_3 {
+#gsqnkoldxa .gt_indent_3 {
 text-indent: 15px;
 }
-#ybxedvmotd .gt_indent_4 {
+#gsqnkoldxa .gt_indent_4 {
 text-indent: 20px;
 }
-#ybxedvmotd .gt_indent_5 {
+#gsqnkoldxa .gt_indent_5 {
 text-indent: 25px;
 }
-#ybxedvmotd .katex-display {
+#gsqnkoldxa .katex-display {
 display: inline-flex !important;
 margin-bottom: 0.75em !important;
 }
-#ybxedvmotd div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
+#gsqnkoldxa div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
 height: 0px !important;
 }
 </style>
@@ -1554,22 +1510,22 @@ height: 0px !important;
       <td colspan="11" class="gt_heading gt_subtitle gt_font_normal gt_bottom_border" style>Including Average Sunlight Hours per Season</td>
     </tr>
     <tr class="gt_col_headings">
-      <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" scope="col" id="Season">Season</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="avg_sunlight_hours">Avg Sunlight (Hours)</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Ayrshire-and-Arran">NHS Ayrshire and Arran</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Borders">NHS Borders</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Dumfries-and-Galloway">NHS Dumfries and Galloway</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Forth-Valley">NHS Forth Valley</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Lothian">NHS Lothian</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Fife">NHS Fife</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Tayside">NHS Tayside</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Greater-Glasgow-and-Clyde">NHS Greater Glasgow and Clyde</th>
-      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" scope="col" id="NHS-Lanarkshire">NHS Lanarkshire</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="Season">Season</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="avg_sunlight_hours">Avg Sunlight (Hours)</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Ayrshire-and-Arran">NHS Ayrshire and Arran</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Borders">NHS Borders</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Dumfries-and-Galloway">NHS Dumfries and Galloway</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Forth-Valley">NHS Forth Valley</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Lothian">NHS Lothian</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Fife">NHS Fife</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Tayside">NHS Tayside</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Greater-Glasgow-and-Clyde">NHS Greater Glasgow and Clyde</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="font-weight: bold;" scope="col" id="NHS-Lanarkshire">NHS Lanarkshire</th>
     </tr>
   </thead>
   <tbody class="gt_table_body">
-    <tr><td headers="Season" class="gt_row gt_left">Autumn</td>
-<td headers="avg_sunlight_hours" class="gt_row gt_right">84.15</td>
+    <tr><td headers="Season" class="gt_row gt_left" style="font-weight: bold;">Autumn</td>
+<td headers="avg_sunlight_hours" class="gt_row gt_right" style="font-weight: bold;">84.15</td>
 <td headers="NHS Ayrshire and Arran" class="gt_row gt_right">7.20</td>
 <td headers="NHS Borders" class="gt_row gt_right">6.61</td>
 <td headers="NHS Dumfries and Galloway" class="gt_row gt_right">7.42</td>
@@ -1579,19 +1535,19 @@ height: 0px !important;
 <td headers="NHS Tayside" class="gt_row gt_right">6.31</td>
 <td headers="NHS Greater Glasgow and Clyde" class="gt_row gt_right">7.17</td>
 <td headers="NHS Lanarkshire" class="gt_row gt_right">7.22</td></tr>
-    <tr><td headers="Season" class="gt_row gt_left">Spring</td>
-<td headers="avg_sunlight_hours" class="gt_row gt_right">144.23</td>
-<td headers="NHS Ayrshire and Arran" class="gt_row gt_right">7.17</td>
-<td headers="NHS Borders" class="gt_row gt_right">6.54</td>
-<td headers="NHS Dumfries and Galloway" class="gt_row gt_right">7.41</td>
-<td headers="NHS Forth Valley" class="gt_row gt_right">7.23</td>
-<td headers="NHS Lothian" class="gt_row gt_right">5.85</td>
-<td headers="NHS Fife" class="gt_row gt_right">7.45</td>
-<td headers="NHS Tayside" class="gt_row gt_right">6.33</td>
-<td headers="NHS Greater Glasgow and Clyde" class="gt_row gt_right">7.22</td>
-<td headers="NHS Lanarkshire" class="gt_row gt_right">7.22</td></tr>
-    <tr><td headers="Season" class="gt_row gt_left">Summer</td>
-<td headers="avg_sunlight_hours" class="gt_row gt_right">167.88</td>
+    <tr><td headers="Season" class="gt_row gt_left gt_striped" style="font-weight: bold;">Spring</td>
+<td headers="avg_sunlight_hours" class="gt_row gt_right gt_striped" style="font-weight: bold;">144.23</td>
+<td headers="NHS Ayrshire and Arran" class="gt_row gt_right gt_striped">7.17</td>
+<td headers="NHS Borders" class="gt_row gt_right gt_striped">6.54</td>
+<td headers="NHS Dumfries and Galloway" class="gt_row gt_right gt_striped">7.41</td>
+<td headers="NHS Forth Valley" class="gt_row gt_right gt_striped">7.23</td>
+<td headers="NHS Lothian" class="gt_row gt_right gt_striped">5.85</td>
+<td headers="NHS Fife" class="gt_row gt_right gt_striped">7.45</td>
+<td headers="NHS Tayside" class="gt_row gt_right gt_striped">6.33</td>
+<td headers="NHS Greater Glasgow and Clyde" class="gt_row gt_right gt_striped">7.22</td>
+<td headers="NHS Lanarkshire" class="gt_row gt_right gt_striped">7.22</td></tr>
+    <tr><td headers="Season" class="gt_row gt_left" style="font-weight: bold;">Summer</td>
+<td headers="avg_sunlight_hours" class="gt_row gt_right" style="font-weight: bold;">167.88</td>
 <td headers="NHS Ayrshire and Arran" class="gt_row gt_right">7.28</td>
 <td headers="NHS Borders" class="gt_row gt_right">6.38</td>
 <td headers="NHS Dumfries and Galloway" class="gt_row gt_right">7.32</td>
@@ -1601,17 +1557,17 @@ height: 0px !important;
 <td headers="NHS Tayside" class="gt_row gt_right">6.30</td>
 <td headers="NHS Greater Glasgow and Clyde" class="gt_row gt_right">7.23</td>
 <td headers="NHS Lanarkshire" class="gt_row gt_right">7.24</td></tr>
-    <tr><td headers="Season" class="gt_row gt_left">Winter</td>
-<td headers="avg_sunlight_hours" class="gt_row gt_right">43.75</td>
-<td headers="NHS Ayrshire and Arran" class="gt_row gt_right">7.03</td>
-<td headers="NHS Borders" class="gt_row gt_right">6.20</td>
-<td headers="NHS Dumfries and Galloway" class="gt_row gt_right">7.09</td>
-<td headers="NHS Forth Valley" class="gt_row gt_right">7.00</td>
-<td headers="NHS Lothian" class="gt_row gt_right">5.58</td>
-<td headers="NHS Fife" class="gt_row gt_right">6.99</td>
-<td headers="NHS Tayside" class="gt_row gt_right">6.04</td>
-<td headers="NHS Greater Glasgow and Clyde" class="gt_row gt_right">6.95</td>
-<td headers="NHS Lanarkshire" class="gt_row gt_right">6.91</td></tr>
+    <tr><td headers="Season" class="gt_row gt_left gt_striped" style="font-weight: bold;">Winter</td>
+<td headers="avg_sunlight_hours" class="gt_row gt_right gt_striped" style="font-weight: bold;">43.75</td>
+<td headers="NHS Ayrshire and Arran" class="gt_row gt_right gt_striped">7.03</td>
+<td headers="NHS Borders" class="gt_row gt_right gt_striped">6.20</td>
+<td headers="NHS Dumfries and Galloway" class="gt_row gt_right gt_striped">7.09</td>
+<td headers="NHS Forth Valley" class="gt_row gt_right gt_striped">7.00</td>
+<td headers="NHS Lothian" class="gt_row gt_right gt_striped">5.58</td>
+<td headers="NHS Fife" class="gt_row gt_right gt_striped">6.99</td>
+<td headers="NHS Tayside" class="gt_row gt_right gt_striped">6.04</td>
+<td headers="NHS Greater Glasgow and Clyde" class="gt_row gt_right gt_striped">6.95</td>
+<td headers="NHS Lanarkshire" class="gt_row gt_right gt_striped">6.91</td></tr>
   </tbody>
   
   
@@ -1622,7 +1578,7 @@ height: 0px !important;
 <h4>Line graph showing how the average prescription per person changes
 across the 4 seasons for each healthboard</h4>
 <p>Here we can more specifically see which healthboards have the highest
-and lowest rates of antidepressant prescriptions.</p>
+and lowest rates of antidepressant prescriptions across the seasons.</p>
 <pre class="r"><code># Generating bright colour for each healthboard
 bright_colors &lt;- scales::hue_pal()(length(unique(prescription_rates$hb_name)))
 
@@ -1706,14 +1662,22 @@ need for antidepressants.</p>
 to treat SAD other than just antidepressant prescriptions such as light
 therapy and cognitive behavior therapy (Galima, Vogel and Kowalski,
 2020).</p>
+<p>Finally, it is important to take into consideration that some people
+will collect prescriptions to. last them the next few months so they
+could be collected antidepressants for SAD in autumn to last them
+through the winter. This limitation could affect the results making the
+prescription rate low for winter when in fact more people could be
+taking antidepressants at this time.</p>
 </div>
 <div id="next-steps" class="section level4">
 <h4>Next Steps:</h4>
 <p>Analysing the other potential factors that influence antidepressant
-prescriptions. Exploring datasets on sex as SAD is more prevelant in
-females , weather patterns (e.g. rainfall), population genetics, levels
-of stress, access to mental health services and therefore receiving
-diagnosis / prescription.</p>
+prescriptions. This includes exploring datasets on sex (SAD is more
+prevelant in females) , weather patterns (e.g. rainfall), population
+genetics, levels of stress, access to mental health services and
+therefore receiving diagnosis / prescription. It would also be
+interesting to analyse data that is exclusively the antidepressant
+presciptions for SAD.</p>
 </div>
 <div id="references" class="section level4">
 <h4>References:</h4>
