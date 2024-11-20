@@ -19,9 +19,11 @@ Seasonal Affective Disorder (SAD) is a mood disorder characterised by depressive
 
 I want to assess whether the regions in Northern Scotland experience higher prescription rates of antidepressants than regions in Southern Scorland as a result of reduced daylight/sunlight causing SAD in individualds during the winter season.
 
-The data that will be used is "Prescriptions in the Community" from NHS Public Health Scotland. I have chosen to use the year 2023 because it is the most recent complete year with all 4 seasons. 
+The data that will be used is "Prescriptions in the Community" from NHS Public Health Scotland. I have chosen to use the year 2022 because 
 
-The Health Boards Area (2019) data from Scotland's Census will be used and each healthboard will be defined as either part of the northern or southern regions in Scotland. 
+it is the most recent complete year with all 4 seasons. Accessible at https://www.opendata.nhs.scot/dataset/prescriptions-in-the-community.
+
+The Health Boards Area (2019) data from Scotland's Census will be used and each healthboard will be defined as either part of the northern or southern regions in Scotland. Accessible at https://www.scotlandscensus.gov.uk/webapi/jsf/tableView/tableView.xhtml.
 
 #### Loading in the data sets, creating seasons and joining healthboard data to prescription data
 
@@ -103,7 +105,7 @@ antidepressant_2023 <- joined_2023 %>%
 ```
 
 
-#### Calculating the total antidepressant prescriptions for Fluoxetine and Sertraline by healthbaord, season and region
+#### Calculating the total antidepressant prescriptions for Fluoxetine and Sertraline by healthboard, season and region
 It is important to calculate the prescription (rates) per person because some healthboards have more people living in them than others.
 
 ```{r}
@@ -138,7 +140,13 @@ prescription_rates <- joined_data %>%
 #### Creating Mapped Graph to present the data
 This plot gives us a more general overview of the differences in antidepressant prescription rates across the northern and southern healthboards in Scotland. 
 
-```{r, fig.width=8, fig.height=10, fig.align='center', out.width='90%'}
+Contrary to expectations that winter might have higher antidepressant prescription rates due SAD, winter actually shows the lowest prescription rates overall. 
+
+The highest rates appear in autumn and spring, particularly in southern urban healthboards as indicated by the warmer (yellow) colors.
+
+Northern, more rural healthboards maintain consistently lower rates throughout all seasons, as represented by the cooler tones.
+
+```{r, fig.width=8, fig.height=9, fig.align='centre', out.width='90%'}
 
 # Load spatial data and standardise the column name
 NHS_healthboards <- st_read("~/Desktop/data_science/B208015/data/NHS_healthboards_2019.shp") %>%
@@ -175,11 +183,15 @@ print(map_plot)
 
 
 #### Creating two tables (northern region and southern region) to show the average prescription per person for each healthboard across the 4 seasons.
-Here I have included the average sunlight hours from the MET office data. I have used the North Scotland data for the northern region and combined the East and West of Southern Scotland for the southern region.
+Here I have included the average sunlight hours from the MET office data because a theory of SAD is that a reduction in sunlight stops the hypothalamus in the brain from working properly, therefore affecting the production of serotonin (a hormone that affects your mood - low levels leads to depression) (NHS, 2021).
+
+I have used the North Scotland MET data for the northern region and combined the East and West of Southern Scotland MET data for the southern region.
+
+Sunlight hours follow an expected pattern, peaking in summer and hitting their lowest point in winter. However, antidepressant prescription rates display the opposite pattern to what is expected, increasing as the average sunglight hours increase. 
 
 ```{r}
 # Function to process Met Office sunshine data
-process_sunshine <- function(url, year_filter = 2023) {
+process_sunshine <- function(url, year_filter = 2022) {
   read_table(url, skip = 5) %>%
     filter(year == year_filter) %>%
     pivot_longer(
@@ -293,6 +305,10 @@ southern_gt_table
 
 Here we can more specifically see which healthboards have the highest and lowest rates of antidepressant prescriptions across the seasons.
 
+In Northern Scotland, prescription rates show subtle variation across seasons, with slightly higher rates observed in spring and summer, and the lowest rates in winter. Among the northern boards, NHS Highland consistently reports the highest antidepressant prescription rates, whereas NHS Western Isles consistently reports the lowest.
+
+In Southern Scotland, the antidepressant prescription rates are generally higher than in the north, with autumn and spring showing peaks, and again in winter slightly lower rates. NHS Dumfries and Galloway stands out with consistently high rates across all seasons, whereas NHS Lothian reports relatively lower rates compared to the other southern healthboards.
+
 ```{r, fig.width=10, fig.height=6, out.width="100%"}
 # Generating bright colour for each healthboard
 bright_colors <- scales::hue_pal()(length(unique(prescription_rates$hb_name)))
@@ -348,21 +364,24 @@ Further research suggests that some people actually experience "reverse SAD," wh
 #### Limitations:
 A key limitation of this research question is that it assumes that SSRI antidepressant prescriptions are all a result of SAD when in fact it is likely to be only a small proportion. It is difficult to therefore establish causation rather than just a correlation.
 
-The reasons for higher antidepressant prescription rates could be linked to several factors rather than SAD. For example, Southern Scotland has more urban areas, particularly around cities like Glasgow and Edinburgh, where people might have greater access to mental health services and are therefore more likely to receive antidepressant prescriptions. Rural regions often have less access to mental health services, potentially lowering prescription rates. 
+The reasons for higher antidepressant prescription rates could be linked to several factors rather than SAD. For example, Southern Scotland has more urban areas, particularly around cities like Glasgow and Edinburgh, where people might have better access to mental health services and are therefore are more likely to receive diagnosis of SAD and antidepressant prescriptions. Rural regions often have less access to mental health services, potentially lowering prescription rates. 
 
 Additionally, although northern Scotland experiences longer winter nights, factors like lifestyle, and occupational stress in the southern areas might contribute to a different type of depression, resulting in a need for antidepressants. 
 
-Another key limitation is that there are alternative therapies used to treat SAD other than just antidepressant prescriptions such as light therapy and cognitive behavior therapy (Galima, Vogel and Kowalski, 2020).
+Another key limitation is that there are alternative therapies used to treat SAD other than just antidepressant prescriptions such as light therapy and cognitive behavioral therapy (CBT) (Galima, Vogel and Kowalski, 2020).
 
-Finally, it is important to take into consideration that some people will collect prescriptions to. last them the next few months so they could be collected antidepressants for SAD in autumn to last them through the winter. This limitation could affect the results making the prescription rate low for winter when in fact more people could be taking antidepressants at this time.
+Finally, it is important to take into consideration that some people will collect prescriptions to last them the next few months so they could be collected antidepressants for SAD in autumn to last them through the winter. This limitation could affect the results making the prescription rate low for winter when in fact more people could be taking antidepressants at this time.
 
 #### Next Steps:
 Analysing the other potential factors that influence antidepressant prescriptions. This includes exploring datasets on sex (SAD is more prevelant in females) , weather patterns (e.g. rainfall), population genetics, levels of stress, access to mental health services and therefore receiving diagnosis / prescription. It would also be interesting to analyse data that is exclusively the antidepressant presciptions for SAD. 
 
 
 #### References:
+Galima, S.V., Vogel, S.R. and Kowalski, A.W. (2020). Seasonal Affective Disorder: Common Questions and Answers. American Family Physician, [online] 102(11), pp.668–672. Available at: https://pubmed.ncbi.nlm.nih.gov/33252911/.NHS (2021). 
+Overview - Seasonal affective disorder (SAD). [online] nhs.uk. Available at: https://www.nhs.uk/mental-health/conditions/seasonal-affective-disorder-sad/overview/.
+Praschak-Rieder, N. and Willeit, M. (2003). Treatment of seasonal affective disorders. Chronobiology and Mood Disorders, 5(4), pp.389–398. doi:https://doi.org/10.31887/dcns.2003.5.4/npraschakrieder.
 
-
-
+#### Use of Generative AI:
+I used ChatGPT to help me with error messages but only when I could not find the error myself. I also used it to help me scale my plots so they fit and were fully visible when I knitted my code.
 
 
