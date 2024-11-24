@@ -132,6 +132,8 @@ prescription_rates <- antidepressant_population %>%
 
 
 #### Creating Mapped Graph to present the data
+Here I have used spatial data (to make a map of the healthboards in scotland), accesible at  https://spatialdata.gov.scot/geonetwork/srv/api/records/f12c3826-4b4b-40e6-bf4f-77b9ed01dc14. 
+
 This plot gives us a more general overview of the differences in antidepressant prescription rates across the northern and southern healthboards in Scotland. 
 
 Contrary to expectations that winter might have higher antidepressant prescription rates due SAD, winter actually shows the lowest prescription rates overall. 
@@ -267,7 +269,7 @@ northern_prescription_rates <- prescription_rates %>%
 # GT table for Northern Scotland
 northern_gt_table <- gt_table(
   northern_prescription_rates,
-  "Northern Scotland NHS Healthboards Average Antidepressant Prescription Data per Person in 2023"
+  "Northern Scotland NHS Healthboards Average Antidepressant Prescription Rates per Person in 2023"
 )
 
 # MET Southern Scotland Sunshine Data URLs
@@ -295,7 +297,7 @@ southern_prescription_rates <- prescription_rates %>%
 # Generate GT table for Southern Scotland
 southern_gt_table <- gt_table(
   southern_prescription_rates,
-  "Southern Scotland NHS Healthboards Antidepressant Prescription Data per Person in 2023"
+  "Southern Scotland NHS Healthboards Antidepressant Prescription Rates per Person in 2023"
 )
 
 northern_gt_table
